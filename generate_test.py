@@ -1,6 +1,7 @@
 #!/usr/bin/python
 from random import randrange
 import vc820
+import sys
 
 def _generate_bytes():  
     bts = bytes()
@@ -19,13 +20,13 @@ def get_random_list(count):
                 mm = vc820.MultimeterMessage(bts)
                 mm.value
             except (ValueError, AttributeError) as e:
-                print(e)
                 continue
+            print("found valid message")
             lst.append(bts)
             break
     return lst
 
-filename = "testvalues"
+filename = sys.argv[1]
 testvaluesfile = open(filename, "wb")
 
 for item in get_random_list(20):
