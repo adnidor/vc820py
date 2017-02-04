@@ -6,9 +6,10 @@ class MultimeterMessage:
 
     def __str__(self):
         measurement_str = self.number+self.unit+" "+self.mode
-        hold = "HOLD" if self.hold else ""
-        bat = "BATTERY_LOW" if self.batlow else ""
-        warnings_str = hold+" "+bat
+        hold = "[HOLD]" if self.hold else ""
+        bat = "[BATTERY_LOW]" if self.batlow else ""
+        rel = "[RELATIVE]" if self.rel else ""
+        warnings_str = hold+bat+rel
         return measurement_str+" "+warnings_str
 
     def __repr__(self):
