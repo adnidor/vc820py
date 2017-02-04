@@ -15,6 +15,22 @@ def handle_message(message):
         csv_writer.writerow([elapsed_time,message.value*message.multiplier,message.base_unit,message.hold,message.rel])
     if save_rawtime:
         rawtimefile.write(str(elapsed_time)+" "+message.raw_message.hex()+"\n")
+    if current_json:
+        f = open(currentjsonfile, "w")
+        mdict =   { "reading": message.get_reading(),
+                    "base_reading": message.get_base_reading(),
+                    "value": message.value,
+                    "unit": message.unit,
+                    "mode": message.mode,
+                    "battery_low": message.batlow,
+                    "hold": message.hold,
+                    "relative": message.rel,
+                    "autorange": message.auto,
+                    "raw_message": message.raw_message.hex(),
+                    "time": elapsed_time,
+                    "diode_test": message.diode }
+        json.dump(mdict,f)
+        f.close()
     print(message)
     values_list.append(message.raw_message)
 
@@ -24,8 +40,14 @@ save_raw = False
 rawfile = None
 save_rawtime = False
 rawtimefile = None
+current_json = False
+currentjsonfile = None
 
-opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime="])
+portname = "/dev/ttyUSB0"
+
+debug = False
+
+opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug", "serialport="])
 for opt,arg in opts:
     if opt == "--csv":
         save_csv = True
@@ -36,6 +58,13 @@ for opt,arg in opts:
     elif opt == "--rawtime":
         save_rawtime = True
         rawtimefile = open(arg, "w")
+    elif opt == "--currentjson":
+        current_json = True
+        currentjsonfile = arg
+    elif opt == "--debug":
+        debug = True
+    elif opt == "--serialport":
+        portname = arg
 
 values_list = []
 start_time = time.time()
@@ -44,10 +73,12 @@ if save_csv:
     csv_writer = csv.writer(csvfile, 'excel-tab')
     csv_writer.writerow(["Time [s]","Value","Unit", "Hold", "Relative"])
 
-#serial_port = serial.Serial("/dev/ttyUSB0", baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
-#serial_port.dtr = True
-#serial_port.rts = False
-serial_port = open("real_logfile", "rb")
+if not debug:
+    serial_port = serial.Serial(portname, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
+    serial_port.dtr = True
+    serial_port.rts = False
+else:
+    serial_port = open("real_logfile", "rb")
 
 
 while True:
