@@ -1,5 +1,4 @@
 #!/usr/bin/python
-
 class MultimeterMessage:
     def __init__(self, message_bytes):
         self.raw_message = message_bytes
@@ -10,12 +9,17 @@ class MultimeterMessage:
         hold = "HOLD" if self.hold else ""
         bat = "BATTERY_LOW" if self.batlow else ""
         warnings_str = hold+" "+bat
-
         return measurement_str+" "+warnings_str
+
+    def __repr__(self):
+        return("MultimeterMessage(message_bytes="+repr(self.raw_message)+")")
 
     def get_reading(self):
         measurement_str = self.number+self.unit+" "+self.mode
         return measurement_str
+
+    def get_base_reading(self):
+        return str(self.value * self.multiplier) + self.base_unit + " " + self.mode
 
     def _parse(self):
         raw = self.raw_message
@@ -36,30 +40,30 @@ class MultimeterMessage:
 
         self.last_segment = seg14
 
-        self.rs232  = True if (seg1&0b0001) else False
-        self.auto   = True if (seg1&0b0010) else False
-        self.dc     = True if (seg1&0b0100) else False
-        self.ac     = True if (seg1&0b1000) else False
+        self.rs232    = True if (seg1&0b0001) else False
+        self.auto     = True if (seg1&0b0010) else False
+        self.dc       = True if (seg1&0b0100) else False
+        self.ac       = True if (seg1&0b1000) else False
 
-        self.diode  = True if (seg10&0b0001) else False
-        self.kilo   = True if (seg10&0b0010) else False
-        self.nano   = True if (seg10&0b0100) else False
-        self.micro  = True if (seg10&0b1000) else False
+        self.diode    = True if (seg10&0b0001) else False
+        self.kilo           = True if (seg10&0b0010) else False
+        self.nano           = True if (seg10&0b0100) else False
+        self.micro          = True if (seg10&0b1000) else False
 
-        self.sound  = True if (seg11&0b0001) else False
-        self.mega   = True if (seg11&0b0010) else False
-        self.percent= True if (seg11&0b0100) else False
-        self.milli  = True if (seg11&0b1000) else False
+        self.sound    = True if (seg11&0b0001) else False
+        self.mega           = True if (seg11&0b0010) else False
+        self.percent        = True if (seg11&0b0100) else False
+        self.milli          = True if (seg11&0b1000) else False
 
-        self.hold   = True if (seg12&0b0001) else False
-        self.rel    = True if (seg12&0b0010) else False
-        self.ohm    = True if (seg12&0b0100) else False
-        self.farad  = True if (seg12&0b1000) else False
+        self.hold     = True if (seg12&0b0001) else False
+        self.rel      = True if (seg12&0b0010) else False
+        self.ohm            = True if (seg12&0b0100) else False
+        self.farad          = True if (seg12&0b1000) else False
 
-        self.batlow = True if (seg13&0b0001) else False
-        self.hertz  = True if (seg13&0b0010) else False
-        self.volt   = True if (seg13&0b0100) else False
-        self.amp    = True if (seg13&0b1000) else False
+        self.batlow   = True if (seg13&0b0001) else False
+        self.hertz          = True if (seg13&0b0010) else False
+        self.volt           = True if (seg13&0b0100) else False
+        self.amp            = True if (seg13&0b1000) else False
 
         if self.dc:
             self.mode = "DC"
@@ -68,7 +72,7 @@ class MultimeterMessage:
         else:
             self.mode = "Unknown"
 
-        self.unit = self._get_unit()
+        self._set_unit()
         self.number = self._get_number()
         try:
             self.value = float(self.number)
@@ -121,18 +125,25 @@ class MultimeterMessage:
             return "0"
         return "X"
 
-    def _get_unit(self):
+    def _set_unit(self):
         modifier = ""
         if self.kilo:
             modifier = "k"
+            self.multiplier = 1000
         elif self.nano:
             modifier = "n"
+            self.multiplier = 0.000000001
         elif self.micro:
+            self.multiplier = 0.000001
             modifier = "u" #um Probleme mit Zeichenkodierungen zu vermeiden
         elif self.milli:
             modifier = "m"
+            self.multiplier = 0.001
         elif self.mega:
             modifier = "M"
+            self.multiplier = 1000000
+        else:
+            self.multiplier = 1
         
         unit = ""
         if self.percent:
@@ -149,5 +160,6 @@ class MultimeterMessage:
             unit = "A"
         else:
             raise ValueError("no unit found")
-
-        return modifier+unit
+        
+        self.unit = modifier+unit
+        self.base_unit = unit
