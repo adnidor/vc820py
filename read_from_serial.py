@@ -46,8 +46,9 @@ currentjsonfile = None
 portname = "/dev/ttyUSB0"
 
 debug = False
+debugfile = None
 
-opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug", "serialport="])
+opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport="])
 for opt,arg in opts:
     if opt == "--csv":
         save_csv = True
@@ -63,6 +64,7 @@ for opt,arg in opts:
         currentjsonfile = arg
     elif opt == "--debug":
         debug = True
+        debugfile = arg
     elif opt == "--serialport":
         portname = arg
 
@@ -78,13 +80,14 @@ if not debug:
     serial_port.dtr = True
     serial_port.rts = False
 else:
-    serial_port = open("real_logfile", "rb")
+    serial_port = open(debugfile, "rb")
 
 
 while True:
     test = serial_port.read(1)
     if len(test) != 1:
-        exit(0) #XXX comment out before connecting to serial
+        if debug:
+            exit(0) #EOF
         print("recieved incomplete data, skipping...", file=sys.stderr)
         continue
     if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x01
@@ -96,3 +99,5 @@ while True:
         rawfile.write(data)
     message = MultimeterMessage(data)
     handle_message(message)
+    if debug:
+        time.sleep(0.5)
