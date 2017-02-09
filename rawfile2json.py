@@ -36,6 +36,8 @@ for message in values_list:
                 "relative": message.rel,
                 "autorange": message.auto,
                 "raw_message": message.raw_message.hex(),
+                "value": message.value,
+                "unit": message.unit,
                 "diode_test": message.diode }
     human_readable_list.append(mdict)
 
