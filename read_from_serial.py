@@ -34,6 +34,18 @@ def handle_message(message):
     print(message)
     values_list.append(message.raw_message)
 
+def usage():
+    print("""Usage:
+
+--csv <file>            Write recorded data as CSV to the specified file
+--raw <file>            Write raw recorded data to the specified file
+--rawtime <file>        Write the timedelta and the hex representation of the message to the specified file
+--currentjson <file>    Write the decoded message in JSON format to the specified file each time a new message is received
+--debug <file>          Debug mode. Read values from specified file instead of serial port
+--serialport <device>   Specify th serial port to be used. Defaults to /dev/ttyUSB0
+--help                  Show this message
+    """)
+
 save_csv = False
 csvfile = None
 save_raw = False
@@ -48,7 +60,7 @@ portname = "/dev/ttyUSB0"
 debug = False
 debugfile = None
 
-opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport="])
+opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help"])
 for opt,arg in opts:
     if opt == "--csv":
         save_csv = True
@@ -67,6 +79,9 @@ for opt,arg in opts:
         debugfile = arg
     elif opt == "--serialport":
         portname = arg
+    elif opt == "--help":
+        usage()
+        exit(0)
 
 values_list = []
 start_time = time.time()
