@@ -12,7 +12,7 @@ def handle_message(message):
     packet_time = time.time()
     elapsed_time = round(packet_time - start_time,4)
     if save_csv:
-        csv_writer.writerow([elapsed_time,message.value*message.multiplier,message.base_unit,message.hold,message.rel])
+        csv_writer.writerow([elapsed_time,message.value*message.multiplier,message.base_unit,message.mode,message.hold,message.rel])
     if save_rawtime:
         rawtimefile.write(str(elapsed_time)+" "+message.raw_message.hex()+"\n")
     if current_json:
@@ -42,6 +42,7 @@ def usage():
 --rawtime <file>        Write the timedelta and the hex representation of the message to the specified file
 --currentjson <file>    Write the decoded message in JSON format to the specified file each time a new message is received
 --debug <file>          Debug mode. Read values from specified file instead of serial port
+--debugwait <sec>       Set the waittime between values in debug mode
 --serialport <device>   Specify th serial port to be used. Defaults to /dev/ttyUSB0
 --help                  Show this message
     """)
@@ -59,8 +60,9 @@ portname = "/dev/ttyUSB0"
 
 debug = False
 debugfile = None
+debugwait = 0.5
 
-opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help"])
+opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "debugwait="])
 for opt,arg in opts:
     if opt == "--csv":
         save_csv = True
@@ -79,6 +81,8 @@ for opt,arg in opts:
         debugfile = arg
     elif opt == "--serialport":
         portname = arg
+    elif opt == "--debugwait":
+        debugwait = float(arg)
     elif opt == "--help":
         usage()
         exit(0)
@@ -88,7 +92,7 @@ start_time = time.time()
 
 if save_csv:
     csv_writer = csv.writer(csvfile, 'excel-tab')
-    csv_writer.writerow(["Time [s]","Value","Unit", "Hold", "Relative"])
+    csv_writer.writerow(["#Time [s]", "Value", "Unit", "Modus", "Hold", "Relative"])
 
 if not debug:
     serial_port = serial.Serial(portname, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
@@ -105,14 +109,18 @@ while True:
             exit(0) #EOF
         print("recieved incomplete data, skipping...", file=sys.stderr)
         continue
-    if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x01
+    if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1
         data = test + serial_port.read(13)
     else:
-        print("received incorrect data, skipping...", file=sys.stderr)
+        print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
         continue
     if save_raw:
         rawfile.write(data)
-    message = MultimeterMessage(data)
+    try:
+        message = MultimeterMessage(data)
+    except ValueError as e:
+        print("Error decoding: %s on message %s"%(str(e),data.hex()))
+        continue
     handle_message(message)
     if debug:
-        time.sleep(0.5)
+        time.sleep(debugwait)
