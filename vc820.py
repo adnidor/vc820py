@@ -75,10 +75,7 @@ class MultimeterMessage:
 
         self._set_unit()
         self.number = self._get_number()
-        try:
-            self.value = float(self.number)
-        except ValueError:
-            pass
+        self.value = float(self.number)
 
     def _get_number(self):
         raw = self.raw_message
