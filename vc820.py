@@ -24,6 +24,12 @@ class MultimeterMessage:
 
     def _parse(self):
         raw = self.raw_message
+        i = 0
+        while i<len(raw):
+            segment = raw[i]
+            i = i + 1
+            if (segment&0xf0) != (i<<4):
+                raise ValueError("Invalid segment %d (%x)"%(i,segment))
         seg1 = raw[0]
         seg2 = raw[1]
         seg3 = raw[2]
@@ -71,11 +77,12 @@ class MultimeterMessage:
         elif self.ac:
             self.mode = "AC"
         else:
-            self.mode = "Unknown"
+            self.mode = ""
 
         self._set_unit()
         self.number = self._get_number()
         self.value = float(self.number)
+        self.base_value = self.value * self.multiplier
 
     def _get_number(self):
         raw = self.raw_message
@@ -87,6 +94,9 @@ class MultimeterMessage:
         digit3 = self._get_digit(raw[5], raw[6])
         point3 = "." if raw[7]&0b1000 else ""
         digit4 = self._get_digit(raw[7], raw[8])
+        
+        if digit2 == "0" and digit3 == "X" and digit1 == "" and digit4 == "":
+            raise ValueError("Overload")
 
         return minus+digit1+point1+digit2+point2+digit3+point3+digit4
 
