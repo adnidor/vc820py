@@ -9,10 +9,17 @@ import json
 import getopt
 
 def handle_message(message): 
+    if base:
+        print(message.get_base_reading())
+    else:
+        print(str(message))
     packet_time = time.time()
     elapsed_time = round(packet_time - start_time,4)
+    global under_threshold
+    global over_threshold
     if save_csv:
         csv_writer.writerow([elapsed_time,message.value*message.multiplier,message.base_unit,message.mode,message.hold,message.rel])
+        csvfile.flush()
     if save_rawtime:
         rawtimefile.write(str(elapsed_time)+" "+message.raw_message.hex()+"\n")
     if current_json:
@@ -31,7 +38,25 @@ def handle_message(message):
                     "diode_test": message.diode }
         json.dump(mdict,f)
         f.close()
-    print(message)
+    if threshold is not None:
+        if under_threshold is None or over_threshold is None:
+            under_threshold = (threshold > message.base_value)
+            over_threshold = (threshold < message.base_value)
+        else:
+            if message.base_value == threshold:
+                pass
+            elif (threshold < message.base_value) != over_threshold:
+                print("WARNING, THRESHOLD CROSSED")
+                if s_o_threshold:
+                    exit(0)
+                under_threshold = (threshold > message.base_value)
+                over_threshold = (threshold < message.base_value)
+            elif (threshold > message.base_value) != under_threshold:
+                print("WARNING, THRESHOLD CROSSED")
+                if s_o_threshold:
+                    exit(0)
+                under_threshold = (threshold > message.base_value)
+                over_threshold = (threshold < message.base_value)
     values_list.append(message.raw_message)
 
 def usage():
@@ -44,15 +69,21 @@ def usage():
 --debug <file>          Debug mode. Read values from specified file instead of serial port
 --debugwait <sec>       Set the waittime between values in debug mode
 --serialport <device>   Specify th serial port to be used. Defaults to /dev/ttyUSB0
+--threshold <number>    Warn if base reading crosses this value
+--stop-on-threshold     Stop if threshold is crossed
+--base                  Print values in the base unit
 --help                  Show this message
     """)
 
 save_csv = False
 csvfile = None
+
 save_raw = False
 rawfile = None
+
 save_rawtime = False
 rawtimefile = None
+
 current_json = False
 currentjsonfile = None
 
@@ -62,7 +93,18 @@ debug = False
 debugfile = None
 debugwait = 0.5
 
-opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "debugwait="])
+threshold = None
+s_o_threshold = False
+
+base = False
+
+try:
+    opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "debugwait=", "threshold=", "base", "stop-on-threshold"])
+except getopt.GetoptError as e:
+    print(e)
+    usage()
+    exit(1)
+
 for opt,arg in opts:
     if opt == "--csv":
         save_csv = True
@@ -86,6 +128,12 @@ for opt,arg in opts:
     elif opt == "--help":
         usage()
         exit(0)
+    elif opt == "--threshold":
+        threshold = float(arg)
+    elif opt == "--base":
+        base = True
+    elif opt == "--stop-on-threshold":
+        s_o_threshold = True
 
 values_list = []
 start_time = time.time()
@@ -101,6 +149,8 @@ if not debug:
 else:
     serial_port = open(debugfile, "rb")
 
+under_threshold = None
+over_threshold = None
 
 while True:
     test = serial_port.read(1)
@@ -112,10 +162,15 @@ while True:
     if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1
         data = test + serial_port.read(13)
     else:
+        if save_raw:
+            rawfile.write(test)
         print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
         continue
     if save_raw:
         rawfile.write(data)
+    if len(data) != 14:
+        print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
+        continue
     try:
         message = MultimeterMessage(data)
     except ValueError as e:
