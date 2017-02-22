@@ -9,6 +9,7 @@ from vc820 import MultimeterMessage
 import json
 import getopt
 import threading
+import os,stat
 
 start_time = time.time()
 
@@ -23,17 +24,39 @@ def print_error(text, tag=None):
     else:
         print("\r[%s] [%s] %s"%(thread_name,str(tag),str(text)),file=sys.stderr)
 
-class ReadThread(threading.Thread):
+class Source:
     def __init__(self,input):
+        if type(input) is not str:
+            raise TypeError("Expecting str")
+        if stat.S_ISCHR(os.stat(input).st_mode): #Character device, assuming serial port
+            self.type = "serial"
+        elif stat.S_ISREG(os.stat(input).st_mode): #Regular file
+            self.type = "file"
+        else:
+            raise TypeError("Unsupported input")
+
+        self.path = input
+
+    def __str__(self):
+        return self.path
+
+    def __repr__(self):
+        return "Source(input="+self.path+")"
+
+class ReadThread(threading.Thread):
+    def __init__(self,source):
         threading.Thread.__init__(self)
-        self.input = input
-        self.setName(str(input))
-        if not debug:
+        self.source = source
+        self.input = source.path
+        self.setName(str(self.source))
+        if source.type == "serial":
             self.serial_port = serial.Serial(input, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
             self.serial_port.dtr = True
             self.serial_port.rts = False
+        elif source.type == "file":
+            self.serial_port = open(source.path, "rb")
         else:
-            self.serial_port = open(input, "rb")
+            raise TypeError("Unsupported input")
 
     def _delete_value(self):
         try:
@@ -45,13 +68,13 @@ class ReadThread(threading.Thread):
         while True:
             if stop_flag:
                 return
-            if debug:
+            if source.type == "file":
                 time.sleep(debugwait)
             test = self.serial_port.read(1)
             if len(test) != 1:
-                if debug:
+                if source.type == "file":
                     self._delete_value()
-                    print_error("EOF reached (Debug mode)")
+                    print_error("EOF reached")
                     exit(0) #EOF
                 print_error("recieved incomplete data, skipping...")
                 self._delete_value()
@@ -87,6 +110,18 @@ def handle_message():
         #sys.stdout.write("\r"+printmsg.strip()+"                   \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b")
         #sys.stdout.flush()
 
+def usage():
+    print("""Usage:
+
+--csv <file>            Write recorded data as CSV to the specified file
+--debug                 Debug mode. Treat source as file instead of serial port
+--filewait <sec>        Set the waittime between values read form file
+--source <device>       Add source to read from. device must be either file or serial port
+--no-stdout             Don't print values on stdout
+--rate <sec>            Read values every x seconds
+--help                  Show this message
+    """)
+
 sources = []
 readthreads = []
 
@@ -99,22 +134,24 @@ csvfile = None
 
 output = True
 
-valid_arguments = [ "source=", "debug", "help", "debugwait=", "rate=", "csv=", "no-stdout" ]
+valid_arguments = [ "source=", "debug", "help", "filewait=", "rate=", "csv=", "no-stdout" ]
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], "", valid_arguments)
 except getopt.GetoptError as e:
     print(e)
+    usage()
     exit(1)
 
 for opt,arg in opts:
     if opt == "--debug":
         debug = True
     elif opt == "--source":
-        sources.append(arg)
+        sources.append(Source(str(arg)))
     elif opt == "--help":
-        pass
-    elif opt == "--debugwait":
+        usage()
+        exit(0)
+    elif opt == "--filewait":
         debugwait = float(arg)
     elif opt == "--rate":
         mainwait = float(arg)
@@ -122,6 +159,11 @@ for opt,arg in opts:
         csvfile = open(arg, "w")
     elif opt == "--no-stdout":
         output = False
+
+if len(sources) == 0:
+    print_error("At least one Source is required")
+    usage()
+    exit(1)
 
 if csvfile is not None:
     csvwriter = csv.DictWriter(csvfile, ["time"]+sources, dialect="excel-tab")
@@ -136,11 +178,15 @@ for source in sources:
 try:
     i = 0
     sleep(1)
+    no_values = False
     while True:
         sleep(mainwait)
         if len(cur_msg) == 0:
-            print_error("No values read, exiting...")
-            break
+            if no_values == True:
+                print_error("No values read, exiting...")
+                break
+            else:
+                no_values = True
         handle_message()
 finally:
     stop_flag = True
