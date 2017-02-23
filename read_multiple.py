@@ -14,6 +14,7 @@ import os,stat
 start_time = time.time()
 
 cur_msg = {}
+messages = {}
 
 stop_flag = False
 
@@ -97,14 +98,20 @@ class ReadThread(threading.Thread):
                 continue
             cur_msg[self.getName()] = message
 
+
 def handle_message():
+    global messages
     messages = cur_msg
     elapsed_time = round(time.time() - start_time, 4)
     printmsg = "%.4fs | "%elapsed_time
     for key,value in sorted(messages.items()):
         printmsg += str(value).strip()+" | "
     if csvfile is not None:
-        csvwriter.writerow({"time": elapsed_time, **messages})
+        csv_dict = {"time": elapsed_time}
+        for key,value in messages.items():
+            csv_dict.update({key:value.base_value})
+        csvwriter.writerow(csv_dict)
+        csvfile.flush()
     if output:
         print(printmsg.strip())
         #sys.stdout.write("\r"+printmsg.strip()+"                   \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b")
@@ -166,7 +173,7 @@ if len(sources) == 0:
     exit(1)
 
 if csvfile is not None:
-    csvwriter = csv.DictWriter(csvfile, ["time"]+sources, dialect="excel-tab")
+    csvwriter = csv.DictWriter(csvfile, ["time"]+[ str(x) for x in sources], dialect="excel-tab")
     csvwriter.writeheader()
 
 for source in sources:
