@@ -8,6 +8,8 @@ from vc820 import MultimeterMessage
 import json
 import getopt
 
+#huge fucking mess
+#TODO: split into smaller functions
 def handle_message(message): 
     if base:
         print(message.get_base_reading())
@@ -98,6 +100,7 @@ s_o_threshold = False
 
 base = False
 
+#start parsing arguments
 try:
     opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "debugwait=", "threshold=", "base", "stop-on-threshold"])
 except getopt.GetoptError as e:
@@ -134,6 +137,7 @@ for opt,arg in opts:
         base = True
     elif opt == "--stop-on-threshold":
         s_o_threshold = True
+#stop parsing arguments
 
 values_list = []
 start_time = time.time()
@@ -144,6 +148,7 @@ if save_csv:
 
 if not debug:
     serial_port = serial.Serial(portname, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
+    #dtr and rts settings required for adapter
     serial_port.dtr = True
     serial_port.rts = False
 else:
@@ -159,7 +164,7 @@ while True:
             exit(0) #EOF
         print("recieved incomplete data, skipping...", file=sys.stderr)
         continue
-    if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1
+    if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1, if it isn't this is not the start of a message
         data = test + serial_port.read(13)
     else:
         if save_raw:
