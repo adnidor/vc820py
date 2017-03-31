@@ -1,15 +1,16 @@
 #!/usr/bin/python
-import serial
+import csv
+import getopt
+import os
+import stat
+import sys
+import threading
 import time
 from time import sleep
-import csv
-import sys
-from pprint import pprint
+
+import serial
+
 from vc820 import MultimeterMessage
-import json
-import getopt
-import threading
-import os,stat
 
 start_time = time.time()
 
@@ -51,7 +52,7 @@ class ReadThread(threading.Thread):
         self.input = source.path
         self.setName(str(self.source))
         if source.type == "serial":
-            self.serial_port = serial.Serial(input, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
+            self.serial_port = serial.Serial(source.path, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
             self.serial_port.dtr = True
             self.serial_port.rts = False
         elif source.type == "file":
