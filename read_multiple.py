@@ -12,32 +12,35 @@ import serial
 
 from vc820 import MultimeterMessage
 
-start_time = time.time()
+start_time = time.time() #unix time
 
-cur_msg = {}
-messages = {}
+cur_msg = {} #:store latest message from each source
 
 stop_flag = False
 
-def print_error(text, tag=None):
+def print_error(text):
+    """
+    Prefix text with Thread name and send to stderr
+    """
     thread_name = str(threading.current_thread().getName())
-    if tag is None:
-        print('\r[%s] %s'%(thread_name,text),file=sys.stderr)
-    else:
-        print("\r[%s] [%s] %s"%(thread_name,str(tag),str(text)),file=sys.stderr)
+    print('\r[%s] %s'%(thread_name,text),file=sys.stderr)
+
 
 class Source:
-    def __init__(self,input):
-        if type(input) is not str:
+    def __init__(self,path):
+        if type(path) is not str:
             raise TypeError("Expecting str")
-        if stat.S_ISCHR(os.stat(input).st_mode): #Character device, assuming serial port
+
+        if stat.S_ISCHR(os.stat(path).st_mode): #Character device, assuming serial port
             self.type = "serial"
-        elif stat.S_ISREG(os.stat(input).st_mode): #Regular file
+        elif stat.S_ISREG(os.stat(path).st_mode): #Regular file
             self.type = "file"
+        elif stat.S_ISFIFO(os.stat(path).st_mode): #Pipe
+            self.type = "pipe"
         else:
             raise TypeError("Unsupported input")
 
-        self.path = input
+        self.path = path
 
     def __str__(self):
         return self.path
@@ -45,19 +48,22 @@ class Source:
     def __repr__(self):
         return "Source(input="+self.path+")"
 
+
 class ReadThread(threading.Thread):
     def __init__(self,source):
         threading.Thread.__init__(self)
         self.source = source
-        self.input = source.path
         self.setName(str(self.source))
+
         if source.type == "serial":
             self.serial_port = serial.Serial(source.path, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
+            #dtr and rts required for supplying adapter with power
             self.serial_port.dtr = True
             self.serial_port.rts = False
-        elif source.type == "file":
+        elif source.type == "file" or source.type == "pipe":
             self.serial_port = open(source.path, "rb")
         else:
+            #should never happen, prevented by Source.__init__()
             raise TypeError("Unsupported input")
 
     def _delete_value(self):
@@ -71,26 +77,31 @@ class ReadThread(threading.Thread):
             if stop_flag:
                 return
             if source.type == "file":
-                time.sleep(debugwait)
-            test = self.serial_port.read(1)
+                time.sleep(filewait)
+
+            test = self.serial_port.read(1) #read one byte, used for determining if message is valid
+                                            #blocking if using fifo, times out if using serial port
             if len(test) != 1:
                 if source.type == "file":
-                    self._delete_value()
+                    self._delete_value() #prevent outdated values from hanging around
                     print_error("EOF reached")
                     exit(0) #EOF
                 print_error("recieved incomplete data, skipping...")
-                self._delete_value()
+                self._delete_value() #Multimeter has probably been turned off or disconnected
                 continue
-            if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1
-                data = test + self.serial_port.read(13)
+
+            if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1, if it isn't this is not the beginning of a valid message
+                data = test + self.serial_port.read(13) #looks good, read the remaining message
             else:
                 print_error("received incorrect data (%s), skipping..."%test.hex())
                 self._delete_value()
                 continue
+
             if len(data) != 14:
                 print_error("received incomplete message (%s), skipping..."%data.hex())
                 self._delete_value()
                 continue
+
             try:
                 message = MultimeterMessage(data)
             except ValueError as e:
@@ -100,20 +111,22 @@ class ReadThread(threading.Thread):
             cur_msg[self.getName()] = message
 
 
-def handle_message():
-    global messages
-    messages = cur_msg
-    elapsed_time = round(time.time() - start_time, 4)
+def handle_messages():
+    messages = cur_msg #make working copy of dict to make sure values don't change
+    elapsed_time = round(time.time() - start_time, 4) #we don't need more than 4 digits
     printmsg = "%.4fs | "%elapsed_time
-    for key,value in sorted(messages.items()):
-        printmsg += str(value).strip()+" | "
+
+    #TODO: put in dedicated function
     if csvfile is not None:
         csv_dict = {"time": elapsed_time}
         for key,value in messages.items():
             csv_dict.update({key:value.base_value})
         csvwriter.writerow(csv_dict)
         csvfile.flush()
+
     if output:
+        for key,value in sorted(messages.items()):
+            printmsg += str(value).strip()+" | "
         print(printmsg.strip())
         #sys.stdout.write("\r"+printmsg.strip()+"                   \b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b")
         #sys.stdout.flush()
@@ -122,8 +135,7 @@ def usage():
     print("""Usage:
 
 --csv <file>            Write recorded data as CSV to the specified file
---debug                 Debug mode. Treat source as file instead of serial port
---filewait <sec>        Set the waittime between values read form file
+--filewait <sec>        Set the wait time between values read from file
 --source <device>       Add source to read from. device must be either file or serial port
 --no-stdout             Don't print values on stdout
 --rate <sec>            Read values every x seconds
@@ -133,16 +145,15 @@ def usage():
 sources = []
 readthreads = []
 
-debug = False
-debugwait = 0.5
-
+#default values
+filewait = 0.5
 mainwait = 0.5
 
 csvfile = None
 
 output = True
 
-valid_arguments = [ "source=", "debug", "help", "filewait=", "rate=", "csv=", "no-stdout" ]
+valid_arguments = [ "source=", "help", "filewait=", "rate=", "csv=", "no-stdout" ]
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], "", valid_arguments)
@@ -152,15 +163,13 @@ except getopt.GetoptError as e:
     exit(1)
 
 for opt,arg in opts:
-    if opt == "--debug":
-        debug = True
-    elif opt == "--source":
+    if opt == "--source":
         sources.append(Source(str(arg)))
     elif opt == "--help":
         usage()
         exit(0)
     elif opt == "--filewait":
-        debugwait = float(arg)
+        filewait = float(arg)
     elif opt == "--rate":
         mainwait = float(arg)
     elif opt == "--csv":
@@ -187,14 +196,16 @@ try:
     i = 0
     sleep(1)
     no_values = False
+
+    #main loop
     while True:
         sleep(mainwait)
         if len(cur_msg) == 0:
-            if no_values == True:
+            if no_values: #only exit if it occurrs a second time
                 print_error("No values read, exiting...")
                 break
             else:
                 no_values = True
-        handle_message()
+        handle_messages()
 finally:
-    stop_flag = True
+    stop_flag = True #signal Threads to stop
