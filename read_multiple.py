@@ -31,14 +31,21 @@ class Source:
         if type(path) is not str:
             raise TypeError("Expecting str")
 
-        if stat.S_ISCHR(os.stat(path).st_mode): #Character device, assuming serial port
-            self.type = "serial"
-        elif stat.S_ISREG(os.stat(path).st_mode): #Regular file
-            self.type = "file"
-        elif stat.S_ISFIFO(os.stat(path).st_mode): #Pipe
-            self.type = "pipe"
-        else:
-            raise TypeError("Unsupported input")
+        if os.name == 'nt': #running on windows
+            if os.path.exists(path):
+                self.type = "file"
+            else: #no file with this name, assuming serial port
+                self.type = "serial"
+
+        elif os.name == "posix": #Linux or Unix (including macOS)
+            if stat.S_ISCHR(os.stat(path).st_mode): #Character device, assuming serial port
+                self.type = "serial"
+            elif stat.S_ISREG(os.stat(path).st_mode): #Regular file
+                self.type = "file"
+            elif stat.S_ISFIFO(os.stat(path).st_mode): #Pipe
+                self.type = "pipe"
+            else:
+                raise TypeError("Unsupported input")
 
         self.path = path
 
