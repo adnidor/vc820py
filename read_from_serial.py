@@ -69,7 +69,7 @@ def usage():
 --rawtime <file>        Write the timedelta and the hex representation of the message to the specified file
 --currentjson <file>    Write the decoded message in JSON format to the specified file each time a new message is received
 --debug <file>          Debug mode. Read values from specified file instead of serial port
---debugwait <sec>       Set the waittime between values in debug mode
+--filewait <sec>       Set the waittime between values in debug mode
 --serialport <device>   Specify th serial port to be used. Defaults to /dev/ttyUSB0
 --threshold <number>    Warn if base reading crosses this value
 --stop-on-threshold     Stop if threshold is crossed
@@ -102,7 +102,7 @@ base = False
 
 #start parsing arguments
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "debugwait=", "threshold=", "base", "stop-on-threshold"])
+    opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "filewait=", "threshold=", "base", "stop-on-threshold"])
 except getopt.GetoptError as e:
     print(e)
     usage()
@@ -126,7 +126,7 @@ for opt,arg in opts:
         debugfile = arg
     elif opt == "--serialport":
         portname = arg
-    elif opt == "--debugwait":
+    elif opt == "--filewait":
         debugwait = float(arg)
     elif opt == "--help":
         usage()
