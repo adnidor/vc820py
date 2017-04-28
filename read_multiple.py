@@ -127,7 +127,10 @@ def handle_messages():
     if csvfile is not None:
         csv_dict = {"time": elapsed_time}
         for key,value in messages.items():
-            csv_dict.update({key:value.base_value})
+            if key == "manual":
+                csv_dict.update({key:value})
+            else:
+                csv_dict.update({key:value.base_value})
         csvwriter.writerow(csv_dict)
         csvfile.flush()
 
@@ -146,6 +149,7 @@ def usage():
 --source <device>       Add source to read from. device must be either file or serial port
 --no-stdout             Don't print values on stdout
 --rate <sec>            Read values every x seconds
+--manual                Take an additional value from stdin
 --help                  Show this message
     """)
 
@@ -160,7 +164,9 @@ csvfile = None
 
 output = True
 
-valid_arguments = [ "source=", "help", "filewait=", "rate=", "csv=", "no-stdout" ]
+manual = False
+
+valid_arguments = [ "source=", "help", "filewait=", "rate=", "csv=", "no-stdout", "manual" ]
 
 try:
     opts, args = getopt.getopt(sys.argv[1:], "", valid_arguments)
@@ -183,6 +189,8 @@ for opt,arg in opts:
         csvfile = open(arg, "w")
     elif opt == "--no-stdout":
         output = False
+    elif opt == "--manual":
+        manual = True
 
 if len(sources) == 0:
     print_error("At least one Source is required")
@@ -190,7 +198,10 @@ if len(sources) == 0:
     exit(1)
 
 if csvfile is not None:
-    csvwriter = csv.DictWriter(csvfile, ["time"]+[ str(x) for x in sources], dialect="excel-tab")
+    if manual:
+        csvwriter = csv.DictWriter(csvfile, ["time", "manual"]+[ str(x) for x in sources], dialect="excel-tab")
+    else:
+        csvwriter = csv.DictWriter(csvfile, ["time"]+[ str(x) for x in sources], dialect="excel-tab")
     csvwriter.writeheader()
 
 for source in sources:
@@ -206,7 +217,10 @@ try:
 
     #main loop
     while True:
-        sleep(mainwait)
+        if manual:
+            cur_msg["manual"] = float(input().replace(",","."))
+        else:
+            sleep(mainwait)
         if len(cur_msg) == 0:
             if no_values: #only exit if it occurrs a second time
                 print_error("No values read, exiting...")
