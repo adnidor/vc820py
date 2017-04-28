@@ -8,6 +8,19 @@ from vc820 import MultimeterMessage
 import json
 import getopt
 
+def store_message(message,elapsed_time):
+    if save_csv:
+        csv_writer.writerow([elapsed_time,message.value*message.multiplier,message.base_unit,message.mode,message.hold,message.rel])
+        csvfile.flush()
+    if save_rawtime:
+        rawtimefile.write(str(elapsed_time)+" "+message.raw_message.hex()+"\n")
+    if save_json:
+        f = open(jsonfile, "w")
+        f.write(message.get_json())
+        f.close()
+
+
+
 #huge fucking mess
 #TODO: split into smaller functions
 def handle_message(message): 
@@ -17,29 +30,11 @@ def handle_message(message):
         print(str(message))
     packet_time = time.time()
     elapsed_time = round(packet_time - start_time,4)
-    global under_threshold
-    global over_threshold
-    if save_csv:
-        csv_writer.writerow([elapsed_time,message.value*message.multiplier,message.base_unit,message.mode,message.hold,message.rel])
-        csvfile.flush()
-    if save_rawtime:
-        rawtimefile.write(str(elapsed_time)+" "+message.raw_message.hex()+"\n")
-    if current_json:
-        f = open(currentjsonfile, "w")
-        mdict =   { "reading": message.get_reading(),
-                    "base_reading": message.get_base_reading(),
-                    "value": message.value,
-                    "unit": message.unit,
-                    "mode": message.mode,
-                    "battery_low": message.batlow,
-                    "hold": message.hold,
-                    "relative": message.rel,
-                    "autorange": message.auto,
-                    "raw_message": message.raw_message.hex(),
-                    "time": elapsed_time,
-                    "diode_test": message.diode }
-        json.dump(mdict,f)
-        f.close()
+
+    store_message(message, elapsed_time)
+
+    #threshold handling
+    global under_threshold,over_threshold #necessary to prevent UnboundLocalError
     if threshold is not None:
         if under_threshold is None or over_threshold is None:
             under_threshold = (threshold > message.base_value)
@@ -47,19 +42,12 @@ def handle_message(message):
         else:
             if message.base_value == threshold:
                 pass
-            elif (threshold < message.base_value) != over_threshold:
+            elif ((threshold < message.base_value) != over_threshold) or ((threshold > message.base_value) != under_threshold):
                 print("WARNING, THRESHOLD CROSSED")
-                if s_o_threshold:
+                if stop_on_threshold:
                     exit(0)
                 under_threshold = (threshold > message.base_value)
                 over_threshold = (threshold < message.base_value)
-            elif (threshold > message.base_value) != under_threshold:
-                print("WARNING, THRESHOLD CROSSED")
-                if s_o_threshold:
-                    exit(0)
-                under_threshold = (threshold > message.base_value)
-                over_threshold = (threshold < message.base_value)
-    values_list.append(message.raw_message)
 
 def usage():
     print("""Usage:
@@ -69,8 +57,8 @@ def usage():
 --rawtime <file>        Write the timedelta and the hex representation of the message to the specified file
 --currentjson <file>    Write the decoded message in JSON format to the specified file each time a new message is received
 --debug <file>          Debug mode. Read values from specified file instead of serial port
---filewait <sec>       Set the waittime between values in debug mode
---serialport <device>   Specify th serial port to be used. Defaults to /dev/ttyUSB0
+--filewait <sec>        Set the wait time between values in debug mode
+--serialport <device>   Specify the serial port to be used. Defaults to /dev/ttyUSB0
 --threshold <number>    Warn if base reading crosses this value
 --stop-on-threshold     Stop if threshold is crossed
 --base                  Print values in the base unit
@@ -86,9 +74,10 @@ rawfile = None
 save_rawtime = False
 rawtimefile = None
 
-current_json = False
-currentjsonfile = None
+save_json = False
+jsonfile = None
 
+#default value
 portname = "/dev/ttyUSB0"
 
 debug = False
@@ -96,7 +85,7 @@ debugfile = None
 debugwait = 0.5
 
 threshold = None
-s_o_threshold = False
+stop_on_threshold = False
 
 base = False
 
@@ -119,8 +108,8 @@ for opt,arg in opts:
         save_rawtime = True
         rawtimefile = open(arg, "w")
     elif opt == "--currentjson":
-        current_json = True
-        currentjsonfile = arg
+        save_json = True
+        jsonfile = arg
     elif opt == "--debug":
         debug = True
         debugfile = arg
@@ -136,10 +125,9 @@ for opt,arg in opts:
     elif opt == "--base":
         base = True
     elif opt == "--stop-on-threshold":
-        s_o_threshold = True
+        stop_on_threshold = True
 #stop parsing arguments
 
-values_list = []
 start_time = time.time()
 
 if save_csv:
@@ -166,13 +154,13 @@ while True:
         continue
     if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1, if it isn't this is not the start of a message
         data = test + serial_port.read(13)
+        if save_raw:
+            rawfile.write(data)
     else:
         if save_raw:
             rawfile.write(test)
         print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
         continue
-    if save_raw:
-        rawfile.write(data)
     if len(data) != 14:
         print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
         continue

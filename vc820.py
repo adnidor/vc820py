@@ -201,3 +201,19 @@ class MultimeterMessage:
         
         self.unit = modifier+unit
         self.base_unit = unit
+
+    def get_json(self):
+        import json
+
+        mdict =   { "reading": self.get_reading(),
+                    "base_reading": self.get_base_reading(),
+                    "value": self.value,
+                    "unit": self.unit,
+                    "mode": self.mode,
+                    "battery_low": self.batlow,
+                    "hold": self.hold,
+                    "relative": self.rel,
+                    "autorange": self.auto,
+                    "raw_self": self.raw_message.hex(),
+                    "diode_test": self.diode }
+        return json.dumps(mdict)
