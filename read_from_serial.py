@@ -4,7 +4,7 @@ import time
 import csv
 import sys
 from pprint import pprint
-from vc820 import MultimeterMessage
+#from vc820 import MultimeterMessage
 import json
 import getopt
 
@@ -89,9 +89,11 @@ stop_on_threshold = False
 
 base = False
 
+model = "vc820"
+
 #start parsing arguments
 try:
-    opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "filewait=", "threshold=", "base", "stop-on-threshold"])
+    opts, args = getopt.getopt(sys.argv[1:], "", ["csv=", "raw=", "rawtime=", "currentjson=", "debug=", "serialport=", "help", "filewait=", "threshold=", "base", "stop-on-threshold", "model="])
 except getopt.GetoptError as e:
     print(e)
     usage()
@@ -126,7 +128,11 @@ for opt,arg in opts:
         base = True
     elif opt == "--stop-on-threshold":
         stop_on_threshold = True
+    elif opt == "--model":
+        model = arg
 #stop parsing arguments
+
+exec("from "+model+" import MultimeterMessage")
 
 start_time = time.time()
 
@@ -152,7 +158,7 @@ while True:
             exit(0) #EOF
         print("recieved incomplete data, skipping...", file=sys.stderr)
         continue
-    if (test[0]&0b11110000) == 0b00010000: #check if first nibble is 0x1, if it isn't this is not the start of a message
+    if MultimeterMessage.check_first_byte(test[0]):
         data = test + serial_port.read(13)
         if save_raw:
             rawfile.write(data)

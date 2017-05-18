@@ -217,3 +217,7 @@ class MultimeterMessage:
                     "raw_self": self.raw_message.hex(),
                     "diode_test": self.diode }
         return json.dumps(mdict)
+
+    @classmethod
+    def check_first_byte(cls, byte):
+        return (byte&0b11110000) == 0b00010000
