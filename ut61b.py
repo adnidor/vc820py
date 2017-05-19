@@ -1,5 +1,11 @@
 #!/usr/bin/python
 class MultimeterMessage:
+    MESSAGE_LENGTH=14
+
+    @classmethod
+    def check_first_byte(cls,byte):
+        return (byte&0b11111101) == 0b00101001
+
     def __init__(self, message_bytes):
         """
         :param bytes message_bytes: Raw message
@@ -105,7 +111,7 @@ class MultimeterMessage:
         elif point_position == 4:
             point3 = "."
         
-        if digit2 == "0" and digit3 == ":" and digit1 == "?" and digit4 == "":
+        if digit2 == "0" and digit3 == ":" and digit1 == "?" and digit4 == "?":
             raise ValueError("Overload")
 
         return minus+digit1+point1+digit2+point2+digit3+point3+digit4
@@ -172,10 +178,6 @@ class MultimeterMessage:
                     "bargraph": self.bg_value if self.bg_active else None,
                     "diode_test": self.diode }
         return json.dumps(mdict)
-
-    @classmethod
-    def check_first_byte(cls,byte):
-        return (byte&0b11111101) == 0b00101001
 
 def _read_bit(byte,bitnum):
     return True if (byte&(1<<bitnum)) else False

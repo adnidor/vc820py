@@ -1,5 +1,11 @@
 #!/usr/bin/python
 class MultimeterMessage:
+    MESSAGE_LENGTH = 14
+
+    @classmethod
+    def check_first_byte(cls, byte):
+        return (byte&0b11110000) == 0b00010000
+
     def __init__(self, message_bytes):
         """
         :param bytes message_bytes: Raw message
@@ -217,7 +223,3 @@ class MultimeterMessage:
                     "raw_self": self.raw_message.hex(),
                     "diode_test": self.diode }
         return json.dumps(mdict)
-
-    @classmethod
-    def check_first_byte(cls, byte):
-        return (byte&0b11110000) == 0b00010000

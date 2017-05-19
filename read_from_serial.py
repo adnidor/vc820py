@@ -159,7 +159,7 @@ while True:
         print("recieved incomplete data, skipping...", file=sys.stderr)
         continue
     if MultimeterMessage.check_first_byte(test[0]):
-        data = test + serial_port.read(13)
+        data = test + serial_port.read(MultimeterMessage.MESSAGE_LENGTH-1)
         if save_raw:
             rawfile.write(data)
     else:
@@ -167,7 +167,7 @@ while True:
             rawfile.write(test)
         print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
         continue
-    if len(data) != 14:
+    if len(data) != MultimeterMessage.MESSAGE_LENGTH:
         print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
         continue
     try:
