@@ -4,7 +4,7 @@ class MultimeterMessage:
 
     @classmethod
     def check_first_byte(cls,byte):
-        return (byte&0b11111101) == 0b00101001
+        return byte == 0x2d or byte == 0x2b
 
     def __init__(self, message_bytes):
         """
@@ -79,7 +79,7 @@ class MultimeterMessage:
         else:
             self.mode = "" #Happens when measuring resistance, capacitance, ...
 
-        self.bg_value = int(raw[11])
+        self.bg_value = int(raw[11])-128 if _read_bit(raw[11], 7) else int(raw[11]) #convert unsigned byte to signed
 
         self._set_unit()
         self.number = self._get_number() #str
@@ -178,6 +178,13 @@ class MultimeterMessage:
                     "bargraph": self.bg_value if self.bg_active else None,
                     "diode_test": self.diode }
         return json.dumps(mdict)
+
+    def get_percent(self):
+        in_min = 0
+        in_max = 40
+        out_min = 0
+        out_max = 100
+        return (self.bg_value - in_min) * (out_max - out_min) / (in_max - in_min) + out_min
 
 def _read_bit(byte,bitnum):
     return True if (byte&(1<<bitnum)) else False
