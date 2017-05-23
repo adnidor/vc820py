@@ -4,7 +4,6 @@ import time
 import csv
 import sys
 from pprint import pprint
-#from vc820 import MultimeterMessage
 import json
 import getopt
 

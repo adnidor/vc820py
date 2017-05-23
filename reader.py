@@ -3,6 +3,7 @@ import os
 import sys
 import threading
 import stat
+import time
 
 import serial
 
@@ -63,6 +64,23 @@ class Reader():
             #should never happen, prevented by Source.__init__()
             raise TypeError("Unsupported input")
 
+    def read_one(self):
+        while True:
+            test = self.serial_port.read(1)
+            if len(test) != 1:
+                if self.source.type == "file":
+                    return #EOF
+                raise Exception("recieved incomplete data")
+            if self.source.MultimeterMessage.check_first_byte(test[0]):
+                data = test + self.serial_port.read(self.source.MultimeterMessage.MESSAGE_LENGTH-1)
+            else:
+                print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
+                continue
+            if len(data) != self.source.MultimeterMessage.MESSAGE_LENGTH:
+                print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
+                continue
+            return self.source.MultimeterMessage(data)
+
     def start(self):
         while True:
             test = self.serial_port.read(1)
@@ -88,19 +106,21 @@ class Reader():
             except ValueError as e:
                 print("Error decoding: %s on message %s"%(str(e),data.hex()))
                 continue
-            self.message_handler(message,self.source)
+            if self.message_handler(message,self.source) == "exit":
+                break
             if self.source.type == "file":
                 time.sleep(filewait)
 
 
 class ThreadedReader(threading.Thread):
-    def __init__(self,source,value_callback=None,error_callback=None):
+    def __init__(self,source,value_callback=None,error_callback=None,filewait=0.5):
         threading.Thread.__init__(self)
         self.source = source
         self.setName(str(self.source))
         self.stop_flag = False
         self.value_callback = value_callback
         self.error_callback = error_callback
+        self.filewait = filewait
 
         if source.type == "serial":
             self.serial_port = serial.Serial(source.path, baudrate=2400, parity='N', bytesize=8, timeout=1, rtscts=1, dsrdtr=1)
@@ -121,7 +141,7 @@ class ThreadedReader(threading.Thread):
             if self.stop_flag:
                 return
             if self.source.type == "file":
-                time.sleep(filewait)
+                time.sleep(self.filewait)
 
             test = self.serial_port.read(1) #read one byte, used for determining if message is valid
                                             #blocking if using fifo, times out if using serial port
@@ -132,7 +152,8 @@ class ThreadedReader(threading.Thread):
                     print_thread_err("EOF reached")
                     exit(0) #EOF
                 print_thread_err("recieved incomplete data, skipping...")
-                self._delete_value() #Multimeter has probably been turned off or disconnected
+                if self.error_callback is not None:
+                    self.error_callback(self.source)
                 continue
 
             if self.source.MultimeterMessage.check_first_byte(test[0]):
@@ -140,7 +161,7 @@ class ThreadedReader(threading.Thread):
             else:
                 print_thread_err("received incorrect data (%s), skipping..."%test.hex())
                 if self.error_callback is not None:
-                    self.error_callback(source)
+                    self.error_callback(self.source)
                 continue
 
             if len(data) != self.source.MultimeterMessage.MESSAGE_LENGTH:
@@ -154,7 +175,7 @@ class ThreadedReader(threading.Thread):
             except ValueError as e:
                 print_thread_err("Error decoding: %s on message %s"%(str(e),data.hex()))
                 if self.error_callback is not None:
-                    self.error_callback(source)
+                    self.error_callback(self.source)
                 continue
 
             if self.value_callback is not None:
