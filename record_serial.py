@@ -34,3 +34,4 @@ while True:
         continue
     print(data.hex())
     outfile.write(data)
+    outfile.flush()

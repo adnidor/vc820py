@@ -47,7 +47,8 @@ class Source:
         return "Source(path="+self.path+",model="+self.model+")"
 
 class Reader():
-    def __init__(self,source,message_handler=None,raw_handler=None,filewait=0.5):
+    def __init__(self,source,message_handler=None,raw_handler=None,filewait=0.5,quiet=False):
+        self.quiet = quiet
         self.source = source
         self.message_handler = message_handler
         self.raw_handler = raw_handler
@@ -64,6 +65,10 @@ class Reader():
             #should never happen, prevented by Source.__init__()
             raise TypeError("Unsupported input")
 
+    def print(self, *args,**kwargs):
+        if not self.quiet:
+            print(*args,**kwargs)
+
     def read_one(self):
         while True:
             test = self.serial_port.read(1)
@@ -74,10 +79,10 @@ class Reader():
             if self.source.MultimeterMessage.check_first_byte(test[0]):
                 data = test + self.serial_port.read(self.source.MultimeterMessage.MESSAGE_LENGTH-1)
             else:
-                print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
+                self.print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
                 continue
             if len(data) != self.source.MultimeterMessage.MESSAGE_LENGTH:
-                print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
+                self.print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
                 continue
             return self.source.MultimeterMessage(data)
 
@@ -87,7 +92,7 @@ class Reader():
             if len(test) != 1:
                 if self.source.type == "file":
                     return #EOF
-                print("recieved incomplete data, skipping...", file=sys.stderr)
+                self.print("recieved incomplete data, skipping...", file=sys.stderr)
                 continue
             if self.source.MultimeterMessage.check_first_byte(test[0]):
                 data = test + self.serial_port.read(self.source.MultimeterMessage.MESSAGE_LENGTH-1)
@@ -96,15 +101,15 @@ class Reader():
             else:
                 if self.raw_handler is not None:
                     self.raw_handler(test,self.source)
-                print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
+                self.print("received incorrect data (%s), skipping..."%test.hex(), file=sys.stderr)
                 continue
             if len(data) != self.source.MultimeterMessage.MESSAGE_LENGTH:
-                print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
+                self.print("received incomplete message (%s), skipping..."%data.hex(), file=sys.stderr)
                 continue
             try:
                 message = self.source.MultimeterMessage(data)
             except ValueError as e:
-                print("Error decoding: %s on message %s"%(str(e),data.hex()))
+                self.print("Error decoding: %s on message %s"%(str(e),data.hex()))
                 continue
             if self.message_handler(message,self.source) == "exit":
                 break
